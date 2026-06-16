@@ -1,3 +1,4 @@
+//Evan
 // Чтобы функции WinAPI принимали строки wchar_t*, а не char*
 #ifndef UNICODE
 #define UNICODE

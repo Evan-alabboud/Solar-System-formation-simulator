@@ -1,4 +1,5 @@
-﻿#include "MyOGL.h"
+﻿//Evan
+#include "MyOGL.h"
 #include "Render.h"
 
 #include <GL/gl.h>

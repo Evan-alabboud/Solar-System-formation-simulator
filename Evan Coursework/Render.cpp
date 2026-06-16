@@ -1,31 +1,4 @@
-﻿// ============================================================
-//  Render.cpp — "From Big Bang to Solar System"
-//  Курсовая работа по Компьютерной графике
-//
-//  STATES:
-//    0 - Singularity
-//    1 - Big Bang
-//    2 - Cosmic Soup
-//    3 - Galactic Clumping
-//    4 - Solar Nebula
-//    5 - Planetary Accretion
-//    6 - Solar System
-//
-//  CONTROLS:
-//    SPACE      - advance to next state
-//    T          - textures on/off
-//    L          - lighting on/off
-//    A          - alpha/rings on/off
-//    P          - pause/resume
-//    F          - light to camera
-//    G/G+LMB    - move light
-//    1-9        - snap camera to planet
-//    0          - free camera
-//    W          - surface view (when planet selected)
-//    +/-        - time scale up/down
-// ============================================================
-
-#include "Render.h"
+﻿#include "Render.h"
 #include "Texture.h"
 
 #include <windows.h>
@@ -50,27 +23,18 @@ Light light;
 #include "Camera.h"
 Camera camera;
 
-// ─────────────────────────────────────────────────────────────
-//  Global flags
-// ─────────────────────────────────────────────────────────────
 bool texturing = false;
 bool lightning = true;
 bool alpha = true;
 bool animating = true;
 
-static double timeScale = 1.0;   // +/- keys
+static double timeScale = 1.0;   
 static double full_time = 0.0;
 static bool   texturesLoaded = false;
 
-// ─────────────────────────────────────────────────────────────
-//  Textures
-// ─────────────────────────────────────────────────────────────
 Texture tex_sun, tex_mercury, tex_venus, tex_earth, tex_moon;
 Texture tex_mars, tex_jupiter, tex_saturn, tex_uranus, tex_neptune;
 
-// ─────────────────────────────────────────────────────────────
-//  STATE MACHINE
-// ─────────────────────────────────────────────────────────────
 enum SimState
 {
     ST_SINGULARITY = 0,
@@ -95,18 +59,15 @@ static const char* stateNames[] = {
     "6: The Solar System"
 };
 
-// ─────────────────────────────────────────────────────────────
-//  PARTICLE SYSTEM
-// ─────────────────────────────────────────────────────────────
 struct Particle
 {
     float x, y, z;
     float vx, vy, vz;
     float r, g, b, a;
     float size;
-    float life;          // 1=alive 0=dead
-    int   cluster;       // for galactic state
-    float angle;         // for spiral
+    float life;          
+    int   cluster;       
+    float angle;         
 };
 
 static const int   MAX_P = 5000;
@@ -115,15 +76,13 @@ static Particle    P[MAX_P];
 static float frand() { return (float)rand() / (float)RAND_MAX; }
 static float frand2() { return frand() * 2.f - 1.f; }
 
-// ── spawn helpers ────────────────────────────────────────────
-
 static void spawnBigBang()
 {
     for (int i = 0;i < MAX_P;++i)
     {
         float phi = acosf(1.f - 2.f * frand());
         float theta = frand() * 2.f * (float)M_PI;
-        float speed = 0.5f + frand() * 6.0f;          // exponential spread
+        float speed = 0.5f + frand() * 6.0f;          
         P[i].vx = speed * sinf(phi) * cosf(theta);
         P[i].vy = speed * sinf(phi) * sinf(theta);
         P[i].vz = speed * cosf(phi);
@@ -141,7 +100,6 @@ static void spawnBigBang()
 
 static void spawnCosmicSoup()
 {
-    // Fresh particles filling a large sphere — slow random motion
     for (int i = 0;i < MAX_P;++i)
     {
         float phi = acosf(1.f - 2.f * frand());
@@ -150,11 +108,11 @@ static void spawnCosmicSoup()
         P[i].x = r * sinf(phi) * cosf(theta);
         P[i].y = r * sinf(phi) * sinf(theta) * 0.5f;
         P[i].z = r * cosf(phi);
-        // slow chaotic velocity
+
         P[i].vx = frand2() * 0.8f;
         P[i].vy = frand2() * 0.8f;
         P[i].vz = frand2() * 0.8f;
-        // hot plasma colours: red/orange/yellow/white
+
         float heat = frand();
         P[i].r = 1.f;
         P[i].g = heat * 0.8f;
@@ -165,7 +123,7 @@ static void spawnCosmicSoup()
     }
 }
 
-// Gravity anchor positions for galactic clumping (3 proto-galaxies)
+
 static const int   NANCHORS = 3;
 static const float anchorX[NANCHORS] = { 0.f, 18.f,-18.f };
 static const float anchorZ[NANCHORS] = { 0.f,  8.f,  8.f };
@@ -174,17 +132,17 @@ static void spawnGalactic()
 {
     for (int i = 0;i < MAX_P;++i)
     {
-        // start scattered
+
         P[i].x = frand2() * 30.f;
         P[i].y = frand2() * 8.f;
         P[i].z = frand2() * 30.f;
         P[i].vx = frand2() * 0.5f;
         P[i].vy = frand2() * 0.2f;
         P[i].vz = frand2() * 0.5f;
-        // assign cluster
+
         P[i].cluster = i % NANCHORS;
         P[i].angle = frand() * 2.f * (float)M_PI;
-        // cool blue-white colours
+
         P[i].r = 0.6f + frand() * 0.4f;
         P[i].g = 0.7f + frand() * 0.3f;
         P[i].b = 1.f;
@@ -196,20 +154,20 @@ static void spawnGalactic()
 
 static void spawnNebula()
 {
-    // flat spinning disc around origin
+
     for (int i = 0;i < MAX_P;++i)
     {
         float r = 1.f + frand() * 22.f;
         float theta = frand() * 2.f * (float)M_PI;
         P[i].x = r * cosf(theta);
-        P[i].y = frand2() * 1.5f * (1.f - r / 24.f); // flatter at edge
+        P[i].y = frand2() * 1.5f * (1.f - r / 24.f); 
         P[i].z = r * sinf(theta);
-        // tangential velocity — spinning disc
+
         float speed = 0.8f + 3.f / r;
         P[i].vx = -sinf(theta) * speed;
         P[i].vy = frand2() * 0.05f;
         P[i].vz = cosf(theta) * speed;
-        // nebula: purple/pink/orange gradient by radius
+
         float t = r / 24.f;
         P[i].r = 0.9f;
         P[i].g = 0.2f + 0.5f * t;
@@ -220,7 +178,6 @@ static void spawnNebula()
     }
 }
 
-// Orbital radii matching solar system
 static const float accrOrbit[9] =
 { 0.f, 4.5f, 6.5f, 9.f, 12.f, 18.f, 25.f, 32.f, 39.f };
 
@@ -239,7 +196,7 @@ static void spawnAccretion()
         P[i].vx = -sinf(theta) * speed;
         P[i].vy = 0.f;
         P[i].vz = cosf(theta) * speed;
-        // dusty grey-orange
+
         P[i].r = 0.7f + frand() * 0.3f;
         P[i].g = 0.5f + frand() * 0.3f;
         P[i].b = 0.2f + frand() * 0.2f;
@@ -249,11 +206,8 @@ static void spawnAccretion()
     }
 }
 
-// ── update functions ─────────────────────────────────────────
-
 static void updateBigBang(double dt)
 {
-    // exponential acceleration outward
     for (int i = 0;i < MAX_P;++i)
     {
         float boost = 1.f + 0.3f * (float)stateTime;
@@ -267,13 +221,12 @@ static void updateBigBang(double dt)
 
 static void updateCosmicSoup(double dt)
 {
-    // chaotic slow drift, particles bounce in sphere of radius 22
     for (int i = 0;i < MAX_P;++i)
     {
         P[i].x += P[i].vx * (float)dt;
         P[i].y += P[i].vy * (float)dt;
         P[i].z += P[i].vz * (float)dt;
-        // soft bounce off sphere boundary
+
         float dist = sqrtf(P[i].x * P[i].x + P[i].y * P[i].y + P[i].z * P[i].z);
         if (dist > 22.f)
         {
@@ -283,7 +236,7 @@ static void updateCosmicSoup(double dt)
             P[i].vy -= 2.f * dot * ny;
             P[i].vz -= 2.f * dot * nz;
         }
-        // cool down: shift colour from hot to cooler
+
         P[i].g = fminf(1.f, P[i].g + 0.02f * (float)dt);
         P[i].b = fminf(1.f, P[i].b + 0.05f * (float)dt);
     }
@@ -297,22 +250,22 @@ static void updateGalactic(double dt)
         float tx = anchorX[c], tz = anchorZ[c];
         float dx = tx - P[i].x, dy = -P[i].y, dz = tz - P[i].z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz) + 0.5f;
-        // gravity pull
+
         float f = 3.0f / (dist * dist + 1.f);
         P[i].vx += dx / dist * f * (float)dt;
         P[i].vy += dy / dist * f * (float)dt * 0.5f;
         P[i].vz += dz / dist * f * (float)dt;
-        // tangential spin (cross product with up)
+
         float cx = -dz / dist, cz = dx / dist;
         P[i].vx += cx * 1.5f * (float)dt;
         P[i].vz += cz * 1.5f * (float)dt;
-        // damping
+
         float damp = powf(0.995f, (float)dt * 60.f);
         P[i].vx *= damp; P[i].vy *= damp; P[i].vz *= damp;
         P[i].x += P[i].vx * (float)dt;
         P[i].y += P[i].vy * (float)dt;
         P[i].z += P[i].vz * (float)dt;
-        // cool to blue-white
+
         P[i].r = fmaxf(0.4f, P[i].r - 0.1f * (float)dt);
     }
 }
@@ -321,15 +274,15 @@ static void updateNebula(double dt)
 {
     for (int i = 0;i < MAX_P;++i)
     {
-        // orbit around origin + slow collapse inward
+
         P[i].x += P[i].vx * (float)dt;
         P[i].y += P[i].vy * (float)dt;
         P[i].z += P[i].vz * (float)dt;
-        // very gentle inward pull
+
         float dist = sqrtf(P[i].x * P[i].x + P[i].z * P[i].z) + 0.1f;
         P[i].vx -= (P[i].x / dist) * 0.05f * (float)dt;
         P[i].vz -= (P[i].z / dist) * 0.05f * (float)dt;
-        // flatten Y
+
         P[i].vy -= P[i].y * 0.5f * (float)dt;
     }
 }
@@ -338,20 +291,19 @@ static void updateAccretion(double dt)
 {
     for (int i = 0;i < MAX_P;++i)
     {
-        // orbit
         P[i].x += P[i].vx * (float)dt;
         P[i].y += P[i].vy * (float)dt;
         P[i].z += P[i].vz * (float)dt;
-        // correct orbit radius
+
         int   track = i % 9;
         float tr = accrOrbit[track];
         float dist = sqrtf(P[i].x * P[i].x + P[i].z * P[i].z) + 0.01f;
         float pull = (tr - dist) * 0.3f * (float)dt;
         P[i].vx += (P[i].x / dist) * pull;
         P[i].vz += (P[i].z / dist) * pull;
-        // compress Y
+
         P[i].vy -= P[i].y * 1.5f * (float)dt;
-        // particles merge/shrink into spheres (visual: reduce size)
+
         float progress = fminf(1.f, (float)stateTime / 8.f);
         P[i].size = (1.f + frand() * 2.f) * (1.f - progress * 0.7f);
         P[i].a = 0.4f + 0.6f * (1.f - progress * 0.5f);
@@ -363,7 +315,7 @@ static void drawParticles()
     glDisable(GL_LIGHTING);
     glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE);   // additive — bright on black
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);   
     glEnable(GL_POINT_SMOOTH);
 
     for (int i = 0;i < MAX_P;++i)
@@ -381,9 +333,6 @@ static void drawParticles()
     glDisable(GL_POINT_SMOOTH);
 }
 
-// ─────────────────────────────────────────────────────────────
-//  METEOR SHOWER
-// ─────────────────────────────────────────────────────────────
 struct Meteor { float x, y, z, vx, vy, vz, life, maxLife; };
 static const int   NMETEORS = 40;
 static Meteor      meteors[NMETEORS];
@@ -444,9 +393,7 @@ static void updateDrawMeteors(double dt)
     glDisable(GL_BLEND);
 }
 
-// ─────────────────────────────────────────────────────────────
 //  SOLAR SYSTEM DATA
-// ─────────────────────────────────────────────────────────────
 struct PlanetInfo
 {
     const char* name;
@@ -464,7 +411,6 @@ struct PlanetInfo
 
 static PlanetInfo planets[] =
 {
-    //  name       fact                                      moons orb    rad  ospd  spin  tilt  colour            ambient        shin ring  ri   ro    rc           moon  mr    mrad  mspd  tex
     {"Sun",     "Surface temp: 5,500 C",                    0,    0.0,  2.0,  0.0,  5.0,  0.0,  1.f,.85f,.1f,  .5f,.4f,.0f,  16.f,  false,0,0,  0,0,0,  false,0,0,0,  nullptr},
     {"Mercury", "Closest planet to Sun",                    0,    4.5, 0.25, 38.0, 10.0,  0.0, .55f,.5f,.4f,  .2f,.2f,.1f,  16.f,  false,0,0,  0,0,0,  false,0,0,0,  nullptr},
     {"Venus",   "Hottest planet: 465 C",                    0,    6.5, 0.55, 15.0,  6.0,  3.0, .9f,.75f,.3f,  .3f,.3f,.1f,  32.f,  false,0,0,  0,0,0,  false,0,0,0,  nullptr},
@@ -481,12 +427,9 @@ static double orbitAngle[NPLANETS] = { 0 };
 static double spinAngle[NPLANETS] = { 0 };
 static double moonAngle[NPLANETS] = { 0 };
 
-// accretion: growing sphere radii
 static double accretionRadius[NPLANETS] = { 0 };
 
-// ─────────────────────────────────────────────────────────────
 //  STARFIELD BACKGROUND
-// ─────────────────────────────────────────────────────────────
 struct Star { float x, y, z, brightness, size; };
 static const int NSTARS = 1500;
 static Star stars[NSTARS];
@@ -495,10 +438,9 @@ static void initStars()
 {
     for (int i = 0;i < NSTARS;++i)
     {
-        // random point on large sphere around origin
         float phi = acosf(1.f - 2.f * frand());
         float theta = frand() * 2.f * (float)M_PI;
-        float r = 180.f + frand() * 60.f;   // far away
+        float r = 180.f + frand() * 60.f;   
         stars[i].x = r * sinf(phi) * cosf(theta);
         stars[i].y = r * sinf(phi) * sinf(theta);
         stars[i].z = r * cosf(phi);
@@ -511,15 +453,14 @@ static void drawStarfield()
 {
     glDisable(GL_LIGHTING);
     glDisable(GL_TEXTURE_2D);
-    glDisable(GL_DEPTH_TEST);   // always behind everything
+    glDisable(GL_DEPTH_TEST);   
     glEnable(GL_POINT_SMOOTH);
     glBegin(GL_POINTS);
     for (int i = 0;i < NSTARS;++i)
     {
-        // subtle twinkle
         float tw = stars[i].brightness *
             (0.8f + 0.2f * (float)sin(full_time * 1.3f + i * 0.7f));
-        glColor3f(tw, tw, tw * 0.95f + 0.05f);   // very slightly blue-white
+        glColor3f(tw, tw, tw * 0.95f + 0.05f);   
         glPointSize(stars[i].size);
         glVertex3f(stars[i].x, stars[i].y, stars[i].z);
     }
@@ -528,9 +469,7 @@ static void drawStarfield()
     glEnable(GL_DEPTH_TEST);
 }
 
-// ─────────────────────────────────────────────────────────────
 //  ASTEROID BELT
-// ─────────────────────────────────────────────────────────────
 struct Asteroid { float r, angle, y, size; };
 static const int   NAST = 700;
 static Asteroid    ast[NAST];
@@ -546,16 +485,12 @@ static void initAsteroids()
     }
 }
 
-// ─────────────────────────────────────────────────────────────
 //  CAMERA
-// ─────────────────────────────────────────────────────────────
-static int  camTarget = -1;    // -1=free, 0..8=planet
+static int  camTarget = -1;    
 static bool surfaceView = false;
-static double surfaceAngle = 0.0; // slow rotation on surface
+static double surfaceAngle = 0.0; 
 
-// ─────────────────────────────────────────────────────────────
 //  B-SPLINE COMET
-// ─────────────────────────────────────────────────────────────
 struct V3 { double x, y, z; };
 static const V3 cometCP[] = {
     { 35.0, 3.0,  0.0},{ 15.0, 5.0, 22.0},{-15.0, 2.0, 22.0},
@@ -575,9 +510,7 @@ static V3 evalBSpline(double t, const V3* cp, int n)
            cp[i0].z * b0 + cp[i1].z * b1 + cp[i2].z * b2 };
 }
 
-// ─────────────────────────────────────────────────────────────
 //  GEOMETRY
-// ─────────────────────────────────────────────────────────────
 static void drawSphere(double r, int sl, int st)
 {
     for (int i = 0;i < st;++i)
@@ -641,9 +574,7 @@ static void setMat(float ar, float ag, float ab,
     glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, E);
 }
 
-// ─────────────────────────────────────────────────────────────
 //  FONT / HUD
-// ─────────────────────────────────────────────────────────────
 static GLuint fontBase = 0;
 
 static void initFont()
@@ -707,7 +638,7 @@ static void drawHUD(double dt)
     int W = gl.getWidth(), H = gl.getHeight();
     int ls = 18, tx = 16, ty;
 
-    // ── left panel: state + controls ─────────────────────────
+    // ── left panel: state + controls
     drawPanel(8, H - 320, 340, 315);
 
     // state colour coding
@@ -740,13 +671,12 @@ static void drawHUD(double dt)
         }
         ty -= ls;
 
-        // comet pos
         glColor3f(.6f, .9f, 1.f);
         V3 cp = evalBSpline(cometT, cometCP, COMET_N);
         glPrint(tx, ty, "Comet:(%.1f,%.1f,%.1f)", cp.x, cp.y, cp.z);
     }
 
-    // ── right panel: planet info (when locked) ───────────────
+    // ── right panel: planet info (when locked)
     if (simState == ST_SOLAR && camTarget >= 0)
     {
         PlanetInfo& pi = planets[camTarget];
@@ -763,7 +693,7 @@ static void drawHUD(double dt)
         glPrint(tx, ty, ">> %s", pi.fact);
     }
 
-    // ── bottom centre: surface view label ────────────────────
+    // bottom centre: surface view label 
     if (surfaceView && camTarget > 0)
     {
         drawPanel(W / 2 - 160, 8, 320, 30);
@@ -775,9 +705,7 @@ static void drawHUD(double dt)
     end2D();
 }
 
-// ─────────────────────────────────────────────────────────────
 //  BIG BANG FLASH overlay
-// ─────────────────────────────────────────────────────────────
 static void drawFlash()
 {
     if (flashAlpha <= 0.0) return;
@@ -794,9 +722,7 @@ static void drawFlash()
     end2D();
 }
 
-// ─────────────────────────────────────────────────────────────
 //  STATE TRANSITION
-// ─────────────────────────────────────────────────────────────
 static void advanceState()
 {
     if (simState == ST_SOLAR) return;
@@ -821,12 +747,9 @@ static void advanceState()
     }
 }
 
-// ─────────────────────────────────────────────────────────────
 //  KEY HANDLER
-// ─────────────────────────────────────────────────────────────
 void switchModes(OpenGL* sender, KeyEventArg arg)
 {
-    // Check raw virtual key first (works for SPACE, digits, etc.)
     if (arg.key == VK_SPACE) { advanceState(); return; }
 
     auto key = LOWORD(MapVirtualKeyA(arg.key, MAPVK_VK_TO_CHAR));
@@ -840,8 +763,7 @@ void switchModes(OpenGL* sender, KeyEventArg arg)
         if (camTarget >= 0 && simState == ST_SOLAR)
             surfaceView = !surfaceView;
         break;
-        // 1=Sun, 2=Mercury, 3=Venus, 4=Earth, 5=Mars,
-        // 6=Jupiter, 7=Saturn, 8=Uranus, 9=Neptune
+
     case '1': camTarget = 0; surfaceView = false; break;
     case '2': camTarget = 1; surfaceView = false; break;
     case '3': camTarget = 2; surfaceView = false; break;
@@ -852,24 +774,20 @@ void switchModes(OpenGL* sender, KeyEventArg arg)
     case '8': camTarget = 7; surfaceView = false; break;
     case '9': camTarget = 8; surfaceView = false; break;
     case '0': camTarget = -1; surfaceView = false; break;
-        // time scale
+
     case '+': case '=': timeScale = fmin(10.0, timeScale + 0.5); break;
     case '-': case '_': timeScale = fmax(0.1, timeScale - 0.5); break;
     }
 }
 
-// ─────────────────────────────────────────────────────────────
 //  PLANET POSITION
-// ─────────────────────────────────────────────────────────────
 static void getPlanetPos(int idx, double& px, double& pz)
 {
     px = planets[idx].orbitR * cos(orbitAngle[idx] * M_PI / 180.0);
     pz = planets[idx].orbitR * sin(orbitAngle[idx] * M_PI / 180.0);
 }
 
-// ─────────────────────────────────────────────────────────────
 //  initRender
-// ─────────────────────────────────────────────────────────────
 void initRender()
 {
     srand(42);
@@ -878,14 +796,12 @@ void initRender()
     initMeteors();
     initFont();
 
-    // assign texture pointers
     planets[0].tex = &tex_sun;     planets[1].tex = &tex_mercury;
     planets[2].tex = &tex_venus;   planets[3].tex = &tex_earth;
     planets[4].tex = &tex_mars;    planets[5].tex = &tex_jupiter;
     planets[6].tex = &tex_saturn;  planets[7].tex = &tex_uranus;
     planets[8].tex = &tex_neptune;
 
-     //── uncomment these lines after adding PNG files ──────────
      tex_sun.LoadTexture    ("textures/sun.png");
      tex_mercury.LoadTexture("textures/mercury.png");
      tex_venus.LoadTexture  ("textures/venus.png");
@@ -897,7 +813,6 @@ void initRender()
      tex_uranus.LoadTexture ("textures/uranus.png");
      tex_neptune.LoadTexture("textures/neptune.png");
      texturesLoaded=true; texturing=true;
-    // ─────────────────────────────────────────────────────────
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     light.SetPosition(0, 2, 0);
@@ -916,16 +831,12 @@ void initRender()
     gl.KeyDownEvent.reaction(switchModes);
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Render
-// ─────────────────────────────────────────────────────────────
 void Render(double delta_time)
 {
     double dt = delta_time * timeScale;
     full_time += delta_time;
     if (animating) stateTime += dt;
 
-    // ── update planet angles FIRST so camera uses current pos ─
     if (simState == ST_SOLAR && animating)
     {
         cometT += dt * 0.22;
@@ -941,9 +852,7 @@ void Render(double delta_time)
     if (gl.isKeyPressed('F'))
         light.SetPosition(camera.x(), camera.y(), camera.z());
 
-    // ── CAMERA: free mode uses normal SetUpCamera ─────────────
-    // locked mode: bypass Camera class entirely, use gluLookAt
-    // so the camera truly follows the moving planet every frame
+   
     if (simState == ST_SOLAR && camTarget >= 0)
     {
         double px = 0.0, py = 0.0, pz = 0.0;
@@ -954,7 +863,6 @@ void Render(double delta_time)
 
         if (surfaceView && camTarget >= 0)
         {
-            // camera orbits slowly just above the surface
             if (animating) surfaceAngle += delta_time * 6.0;
             double sa = surfaceAngle * M_PI / 180.0;
             double pr = planets[camTarget].radius;
@@ -998,13 +906,10 @@ void Render(double delta_time)
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_BLEND);
 
-    // ── BLACK SPACE BACKGROUND ───────────────────────────────
-    glClearColor(0.0f, 0.0f, 0.02f, 1.0f);   // near-black deep blue
+    glClearColor(0.0f, 0.0f, 0.02f, 1.0f);   
     drawStarfield();
 
-    // ════════════════════════════════════════════════════════
     //  STATE 0: SINGULARITY
-    // ════════════════════════════════════════════════════════
     if (simState == ST_SINGULARITY)
     {
         glEnable(GL_POINT_SMOOTH);
@@ -1013,7 +918,6 @@ void Render(double delta_time)
 
         float pulse = 8.f + 6.f * (float)sin(full_time * 3.0);
 
-        // expanding rings of light
         for (int ring = 0;ring < 4;++ring)
         {
             float rphase = (float)ring * 0.5f;
@@ -1030,7 +934,6 @@ void Render(double delta_time)
             glEnd();
         }
 
-        // layered glow
         glPointSize(pulse * 5.f); glColor4f(1.f, .7f, .1f, .08f);
         glBegin(GL_POINTS); glVertex3d(0, 0, 0); glEnd();
         glPointSize(pulse * 2.f); glColor4f(1.f, .9f, .3f, .3f);
@@ -1050,16 +953,13 @@ void Render(double delta_time)
         end2D();
     }
 
-    // ════════════════════════════════════════════════════════
     //  STATE 1: BIG BANG
-    // ════════════════════════════════════════════════════════
     else if (simState == ST_BIGBANG)
     {
         if (animating) updateBigBang(dt);
         drawParticles();
         drawFlash();
 
-        // fading white central flash sphere
         if (stateTime < 2.0)
         {
             float fa = (float)(1.0 - stateTime / 2.0);
@@ -1075,14 +975,11 @@ void Render(double delta_time)
         }
     }
 
-    // ════════════════════════════════════════════════════════
     //  STATE 2: COSMIC SOUP
-    // ════════════════════════════════════════════════════════
     else if (simState == ST_COSMIC_SOUP)
     {
         if (animating) updateCosmicSoup(dt);
 
-        // large glowing energy sphere outline
         glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
         glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE);
         float pulse2 = 0.5f + 0.5f * (float)sin(full_time * 1.5);
@@ -1093,14 +990,11 @@ void Render(double delta_time)
         drawParticles();
     }
 
-    // ════════════════════════════════════════════════════════
     //  STATE 3: GALACTIC CLUMPING
-    // ════════════════════════════════════════════════════════
     else if (simState == ST_GALACTIC)
     {
         if (animating) updateGalactic(dt);
 
-        // draw anchor gizmos
         glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
         glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE);
         for (int c = 0;c < NANCHORS;++c)
@@ -1116,14 +1010,11 @@ void Render(double delta_time)
         drawParticles();
     }
 
-    // ════════════════════════════════════════════════════════
     //  STATE 4: SOLAR NEBULA
-    // ════════════════════════════════════════════════════════
     else if (simState == ST_NEBULA)
     {
         if (animating) updateNebula(dt);
 
-        // central proto-sun glow
         glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
         glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE);
         float glow = 0.6f + 0.4f * (float)sin(full_time * 2.0);
@@ -1136,15 +1027,12 @@ void Render(double delta_time)
         drawParticles();
     }
 
-    // ════════════════════════════════════════════════════════
     //  STATE 5: PLANETARY ACCRETION
-    // ════════════════════════════════════════════════════════
     else if (simState == ST_ACCRETION)
     {
         if (animating) updateAccretion(dt);
         drawParticles();
 
-        // growing proto-planets along orbital rings
         float progress = fminf(1.f, (float)stateTime / 10.f);
         glEnable(GL_LIGHTING);
         float noE[] = { 0,0,0,1 };
@@ -1153,7 +1041,7 @@ void Render(double delta_time)
         for (int i = 0;i < NPLANETS;++i)
         {
             double tr = accrOrbit[i];
-            // grow radius from 0 to target
+
             accretionRadius[i] = fmin(planets[i].radius,
                 planets[i].radius * progress * 1.2);
             if (accretionRadius[i] < 0.05) continue;
@@ -1171,24 +1059,22 @@ void Render(double delta_time)
         if (lightning) glEnable(GL_LIGHTING);
     }
 
-    // ════════════════════════════════════════════════════════
     //  STATE 6: SOLAR SYSTEM
-    // ════════════════════════════════════════════════════════
     else if (simState == ST_SOLAR)
     {
-        // angles already updated at top of Render()
+
         if (lightning) glEnable(GL_LIGHTING);
         if (texturing) glEnable(GL_TEXTURE_2D);
 
-        // ── meteor shower ─────────────────────────────────────
+
         if (animating) updateDrawMeteors(dt);
 
-        // ── orbit lines ───────────────────────────────────────
+
         glDisable(GL_LIGHTING); glDisable(GL_TEXTURE_2D);
         glColor3d(0.2, 0.2, 0.25);
         for (int i = 1;i < NPLANETS;++i) drawOrbit(planets[i].orbitR, 120);
 
-        // ── asteroid belt ─────────────────────────────────────
+
         glPointSize(2.f); glEnable(GL_POINT_SMOOTH);
         glColor3f(0.5f, 0.45f, 0.35f);
         glBegin(GL_POINTS);
@@ -1201,7 +1087,7 @@ void Render(double delta_time)
         glEnd();
         glDisable(GL_POINT_SMOOTH);
 
-        // ── SUN ───────────────────────────────────────────────
+        // SUN 
         {
             PlanetInfo& s = planets[0];
             float er = s.cr * 0.85f, eg = s.cg * 0.65f;
@@ -1219,13 +1105,12 @@ void Render(double delta_time)
             if (lightning) glEnable(GL_LIGHTING);
         }
 
-        // ── PLANETS ───────────────────────────────────────────
+        // PLANETS 
         for (int i = 1;i < NPLANETS;++i)
         {
             PlanetInfo& p = planets[i];
             double px, pz; getPlanetPos(i, px, pz);
 
-            // Day/Night: ambient low so dark side is dim not black
             setMat(p.ar * 0.3f, p.ag * 0.3f, p.ab * 0.3f,
                 p.cr, p.cg, p.cb,
                 0.5f, 0.5f, 0.6f, p.shininess);
@@ -1283,7 +1168,7 @@ void Render(double delta_time)
             glPopMatrix();
         }
 
-        // ── COMET ─────────────────────────────────────────────
+        //  COMET 
         {
             V3 cp = evalBSpline(cometT, cometCP, COMET_N);
             glDisable(GL_TEXTURE_2D);
@@ -1325,12 +1210,8 @@ void Render(double delta_time)
             glDisable(GL_LINE_STIPPLE);
         }
 
-    } // end ST_SOLAR
+    } 
 
-    // ── always: light gizmo + HUD ────────────────────────────
-    // Note: do NOT call glLoadIdentity+SetUpCamera here —
-    // that would override our gluLookAt locked camera.
-    // Light gizmo draws in current modelview space which is correct.
     light.DrawLightGizmo();
     drawHUD(delta_time);
 }

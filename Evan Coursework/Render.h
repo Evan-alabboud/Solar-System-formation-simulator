@@ -1,3 +1,4 @@
-﻿#pragma once
+﻿//Evan
+#pragma once
 void initRender();
 void Render(double );

@@ -1,4 +1,5 @@
-﻿#include "Texture.h"
+﻿//Evan
+#include "Texture.h"
 
 #include <windows.h>
 #include <GL/gl.h>
